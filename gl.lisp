@@ -95,31 +95,6 @@
                    :draw-func #'(lambda ()
                                   ,@body))))
 
-(defparameter *sync* 3)
-(defparameter *get-sync* 0)
-(let ((phi 0s0))
- (defun draw ()
-   (incf phi (/ (* 2 pi) 60))
-   (with-primitive :lines
-     (color 1 0 0) (vertex 0 0 0) (vertex 1 0 0)
-     (color 0 1 0) (vertex 0 0 0) (vertex 0 1 0)
-     (color 0 0 1) (vertex 0 0 0) (vertex 0 0 1))
-   (translate (* .9 (cos phi)) 0 0)
-   (color 1 1 1)
-   (rect -.1 -1 .1 1)
-   (setf *get-sync*
-    (glx-get-video-sync-sgi))
-   (unless (< *sync* 0)
-     (let ((ret (glx-swap-interval-sgi *sync*)))
-      (unless (= 0 ret)
-	(break "error setting swap interval ~a." ret)))
-     (setf *sync* -1))))
-
-(get-frame-rate)
-
-#+nil
-(with-gui (600 630 600 30)
-  (draw))
 
 (defun split (char str)
   (let ((start 0))
@@ -140,9 +115,9 @@
      (list (subseq str (1+ (first (last pos))))))))
 
 (defparameter *svg-commands*
-  '((translate 2)
-    (cubic-bezier 6)
-    (line-to 2)
+  '((r-translate 2)
+    (r-cubic-bezier 6)
+    (r-line-to 2)
     (end-loop 0)))
 
 (declaim (optimize (debug 3)))
@@ -153,9 +128,9 @@
 	(res nil))
    (loop for i below (length cmds)
       do
-	(let* ((current-cmd (cond ((string= "m" (elt cmds i)) 'translate)
-				  ((string= "c" (elt cmds i)) 'cubic-bezier)
-				  ((string= "l" (elt cmds i)) 'line-to)
+	(let* ((current-cmd (cond ((string= "m" (elt cmds i)) 'r-translate)
+				  ((string= "c" (elt cmds i)) 'r-cubic-bezier)
+				  ((string= "l" (elt cmds i)) 'r-line-to)
 				  ((string= "z" (elt cmds i)) 'end-loop)
 				  (t  (decf i)
 				      'repeat))))
@@ -170,15 +145,28 @@
 		  res))))
    (reverse res)))
 
+
 (defun expand-relative-bezier (args &key (n 10))
   (destructuring-bind (x1 y1 x2 y2 x3 y3) args
-   (loop for i below n collect
-	(let* ((u (/ (* 1s0 i) n))
-	       (v (- 1s0 u))
-	       (uu (* u u))
-	       (vv (* v v)))
-	  `(line-to ,(+ #+nil (* uu u x0) (* 3 uu v x1) (* 3 u vv x2) (* uu u x3))
-		    ,(+ #+nil (* uu u y0) (* 3 uu v y1) (* 3 u vv y2) (* uu u y3)))))))
+    (let* ((ox 0s0)
+	   (oy 0s0))#+nil ((x2 (+ x1 xx2))
+	   (y2 (+ y1 yy2))
+	   (x3 (+ x2 xx3))
+	   (y3 (+ y2 yy3))
+	   
+	   )
+     (loop for i below n collect
+	  (let* ((u (/ (* 1s0 i) n))
+		 (v (- 1s0 u))
+		 (uu (* u u))
+		 (vv (* v v))
+		 (x (+ #+nil (* uu u x0) (* 3 uu v x1) (* 3 u vv x2) (* uu u x3)))
+		 (y (+ #+nil (* uu u y0) (* 3 uu v y1) (* 3 u vv y2) (* uu u y3))))
+	    (prog1
+	     `(r-line-to ,(- x ox)
+			 ,(- y oy))
+	      (setf ox x
+		    oy y)))))))
 
 #+nil
 (expand-relative-bezier '(-1.1 1.2 -2.5 1.3 -4 1.4))
@@ -187,13 +175,81 @@
   (let ((res nil))
     (dolist (e ls)
      (destructuring-bind (cmd &rest rest) e
-       (cond ((eq cmd 'cubic-bezier)
-	      (let ((lines (expand-relative-bezier rest)))
+       (cond ((eq cmd 'r-cubic-bezier)
+	      (let ((lines (expand-relative-bezier rest :n 13)))
 		(dolist (f lines)
 		  (push f res))))
 	     (t (push e res)))))
     (reverse res)))
 
+(defun accumulate-relative-coordinates (ls)
+  (let ((res nil)
+	(x 0s0)
+	(y 0s0))
+    (dolist (e ls)
+     (destructuring-bind (cmd &rest rest) e
+       (cond ((eq cmd 'r-line-to)
+	      (destructuring-bind (xx yy) rest
+		(incf x xx)
+		(incf y yy)
+		(push `(line-to ,x ,y) res)))
+	     ((eq cmd 'r-translate)
+	      (destructuring-bind (xx yy) rest
+		(incf x xx)
+		(incf y yy)
+		(push `(translate ,x ,y) res)))
+	     ((eq cmd 'end-loop))
+	     (t (break "unexpected command ~a" cmd)))))
+    (reverse res)))
 
-(let ((one "m 60.125,91.875 c -1.187999,1.231999 -2.592001,1.3935 -4,1.4375 l 0,1.28125 c 0.637999,-0.022 1.684751,-0.06925 2.71875,-0.53125 l 0,11.3125 -2.59375,0 0,1.28125 6.875,0 0,-1.28125 -2.59375,0 0,-13.5 -0.40625,0 z"))
-  (expand-all-relative-bezier-into-lines (svg-path-d-to-lisp (split-at-comma-space one))))
+(defun svg-to-immediate-opengl (ls)
+  (let ((res))
+    (dolist (e ls)
+      (destructuring-bind (cmd x y) e
+	(cond ((eq cmd 'line-to)
+	       (push `(vertex ,x ,y) res))
+	      ((eq cmd 'translate))
+	      (t (break "unexpected command ~a" cmd)))))
+    (reverse res)))
+
+
+(defmacro draw-one ()
+  (let ((one "m 0.125,.875 c -1.187999,1.231999 -2.592001,1.3935 -4,1.4375 l 0,1.28125 c 0.637999,-0.022 1.684751,-0.06925 2.71875,-0.53125 l 0,11.3125 -2.59375,0 0,1.28125 6.875,0 0,-1.28125 -2.59375,0 0,-13.5 -0.40625,0 z"))
+    `(progn ,@(svg-to-immediate-opengl (accumulate-relative-coordinates 
+				(expand-all-relative-bezier-into-lines 
+				 (svg-path-d-to-lisp (split-at-comma-space one))))))))
+
+(defparameter *sync* 3)
+(defparameter *get-sync* 0)
+(let ((phi 0s0))
+ (defun draw ()
+   (incf phi (/ (* 2 pi) 60))
+   (with-primitive :lines
+     (color 1 0 0) (vertex 0 0 0) (vertex 1 0 0)
+     (color 0 1 0) (vertex 0 0 0) (vertex 0 1 0)
+     (color 0 0 1) (vertex 0 0 0) (vertex 0 0 1))
+   (color 1 1 1)
+   (with-pushed-matrix
+     (scale .03 .03 .03)
+     (with-primitive :line-loop
+       (draw-one)))
+   (translate (* .9 (cos phi)) 0 0)
+   (color 1 1 1)
+   (rect -.1 -1 .1 1)
+   (setf *get-sync*
+    (glx-get-video-sync-sgi))
+   (unless (< *sync* 0)
+     (let ((ret (glx-swap-interval-sgi *sync*)))
+      (unless (= 0 ret)
+	(break "error setting swap interval ~a." ret)))
+     (setf *sync* -1))))
+
+(get-frame-rate)
+
+#+nil
+(with-gui (600 630 600 30)
+  (draw))
+
+
+
+
