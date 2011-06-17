@@ -6,16 +6,19 @@
   (:use :cl :gl :glut))
 (in-package :bla)
 
-(defun build-var (classname var)
-  (list var 
-        :initform nil
-        :accessor (intern (concatenate 'string (string classname) "-" 
-                                       (string var)))
-        :initarg (intern (string var) :keyword)))
+;; use amdcccle for configuration of ATI graphics card
 
-(defun build-varlist (classname varlist)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+(defun build-var (classname var)
+   (list var 
+	 :initform nil
+	 :accessor (intern (concatenate 'string (string classname) "-" 
+					(string var)))
+	 :initarg (intern (string var) :keyword)))
+
+ (defun build-varlist (classname varlist)
    (loop for var in varlist 
-         collect (build-var classname var)))
+      collect (build-var classname var))))
 
 
 (defmacro defobject (name ancestors &rest varlist)
@@ -60,14 +63,15 @@
   (funcall (fenster-draw-func w))
     
   (swap-buffers)
-  ;(flush)
+;  (flush)
   
-  ;(finish)
+;  (finish)
+ ; (sleep (/ 1 68))
   (measure-frame-rate)
   
   (post-redisplay))
 
-#+nil
+
 (sb-alien:define-alien-routine ("glXGetVideoSyncSGI" glx-get-video-sync-sgi)
     sb-alien:int
   (count sb-alien:int :out))
@@ -91,10 +95,11 @@
                    :draw-func #'(lambda ()
                                   ,@body))))
 
-(defparameter *sync* 9)
+(defparameter *sync* 3)
+(defparameter *get-sync* 0)
 (let ((phi 0s0))
  (defun draw ()
-   (incf phi (/ (* 2 pi) 66))
+   (incf phi (/ (* 2 pi) 60))
    (with-primitive :lines
      (color 1 0 0) (vertex 0 0 0) (vertex 1 0 0)
      (color 0 1 0) (vertex 0 0 0) (vertex 0 1 0)
@@ -102,13 +107,93 @@
    (translate (* .9 (cos phi)) 0 0)
    (color 1 1 1)
    (rect -.1 -1 .1 1)
+   (setf *get-sync*
+    (glx-get-video-sync-sgi))
    (unless (< *sync* 0)
-     (unless (= 0
-		(glx-swap-interval-sgi *sync*))
-       (break "error setting swap interval."))
+     (let ((ret (glx-swap-interval-sgi *sync*)))
+      (unless (= 0 ret)
+	(break "error setting swap interval ~a." ret)))
      (setf *sync* -1))))
 
 (get-frame-rate)
 
+#+nil
 (with-gui (600 630 600 30)
   (draw))
+
+(defun split (char str)
+  (let ((start 0))
+   (loop as pos = (position char str :start start)
+	while pos collect
+	(progn
+	  (setf start (1+ pos))
+	  pos))))
+
+(defun split-at-comma-space (str)
+  (let ((pos (sort (append (split #\Space str)
+			   (split #\, str))
+		   #'<)))
+    (append 
+     (list (subseq str 0 (elt pos 0)))
+     (loop for i below (1- (length pos)) collect
+	  (subseq str (1+ (elt pos i)) (elt pos (1+ i))))
+     (list (subseq str (1+ (first (last pos))))))))
+
+(defparameter *svg-commands*
+  '((translate 2)
+    (cubic-bezier 6)
+    (line-to 2)
+    (end-loop 0)))
+
+(declaim (optimize (debug 3)))
+
+
+(defun svg-path-d-to-lisp (cmds)
+  (let ((last-cmd nil)
+	(res nil))
+   (loop for i below (length cmds)
+      do
+	(let* ((current-cmd (cond ((string= "m" (elt cmds i)) 'translate)
+				  ((string= "c" (elt cmds i)) 'cubic-bezier)
+				  ((string= "l" (elt cmds i)) 'line-to)
+				  ((string= "z" (elt cmds i)) 'end-loop)
+				  (t  (decf i)
+				      'repeat))))
+	  (unless (eq current-cmd 'repeat)
+	    (setf last-cmd current-cmd))
+	  (let ((nr-args (first (cdr (assoc last-cmd *svg-commands*)))))
+	    (push `(,last-cmd ,@(loop for j below nr-args collect 
+				     (let ((arg (read-from-string (elt cmds (incf i)))))
+				       #+NIL(unless (numberp arg)
+					 (break "parse error, expected number got ~a." arg))
+				       arg)))
+		  res))))
+   (reverse res)))
+
+(defun expand-relative-bezier (args &key (n 10))
+  (destructuring-bind (x1 y1 x2 y2 x3 y3) args
+   (loop for i below n collect
+	(let* ((u (/ (* 1s0 i) n))
+	       (v (- 1s0 u))
+	       (uu (* u u))
+	       (vv (* v v)))
+	  `(line-to ,(+ #+nil (* uu u x0) (* 3 uu v x1) (* 3 u vv x2) (* uu u x3))
+		    ,(+ #+nil (* uu u y0) (* 3 uu v y1) (* 3 u vv y2) (* uu u y3)))))))
+
+#+nil
+(expand-relative-bezier '(-1.1 1.2 -2.5 1.3 -4 1.4))
+
+(defun expand-all-relative-bezier-into-lines (ls)
+  (let ((res nil))
+    (dolist (e ls)
+     (destructuring-bind (cmd &rest rest) e
+       (cond ((eq cmd 'cubic-bezier)
+	      (let ((lines (expand-relative-bezier rest)))
+		(dolist (f lines)
+		  (push f res))))
+	     (t (push e res)))))
+    (reverse res)))
+
+
+(let ((one "m 60.125,91.875 c -1.187999,1.231999 -2.592001,1.3935 -4,1.4375 l 0,1.28125 c 0.637999,-0.022 1.684751,-0.06925 2.71875,-0.53125 l 0,11.3125 -2.59375,0 0,1.28125 6.875,0 0,-1.28125 -2.59375,0 0,-13.5 -0.40625,0 z"))
+  (expand-all-relative-bezier-into-lines (svg-path-d-to-lisp (split-at-comma-space one))))
