@@ -1,11 +1,16 @@
 (progn
   (ql:quickload "cl-opengl")
-  (ql:quickload "cl-glut"))
+  (ql:quickload "cl-glut")
+  (ql:quickload "cxml"))
 (defpackage :bla
   (:shadowing-import-from :cl close get special)
   (:use :cl :gl :glut))
 (in-package :bla)
 
+(defparameter *q* (cxml:parse-file "numerals.svg" (cxml-dom:make-dom-builder)))
+(dom:child-nodes )
+
+(dom:get-attribute (elt (dom:get-elements-by-tag-name *q* "path") 0) "d")
 ;; use amdcccle for configuration of ATI graphics card
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
