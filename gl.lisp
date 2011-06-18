@@ -129,6 +129,7 @@
     '((r-translate 2)
       (translate 2)
       (r-cubic-bezier 6)
+      (cubic-bezier 6)
       (r-line-to 2)
       (line-to 2)
       (end-loop 0)))
@@ -182,22 +183,19 @@
   #+nil
   (expand-relative-bezier '(-1.1 1.2 -2.5 1.3 -4 1.4))
 
-  (defun expand-absolute-bezier (x0 y0 args &key (n 10))
-    (destructuring-bind (x1 y1 x2 y2 x3 y3) args
-      (let* ((ox x0)
-	     (oy y0))
-	     (loop for i upto n collect
-		  (let* ((u (/ (* 1s0 i) n))
-			 (v (- 1s0 u))
-			 (uu (* u u))
-			 (vv (* v v))
-			 (x (+ (* vv v x0) (* 3 vv u x1) (* 3 uu v x2) (* uu u x3)))
-			 (y (+ (* vv v y0) (* 3 vv u y1) (* 3 uu v y2) (* uu u y3))))
-		    (prog1
-			`(r-line-to ,(- x ox)
-				    ,(- y oy))
-		      (setf ox x
-			    oy y)))))))
+  (defun expand-absolute-bezier (last-absolute-point args &key (n 10))
+    (destructuring-bind (cmd x0 y0) last-absolute-point
+      (unless (eq cmd 'line-to)
+	(break "unexpected command ~a, at this stage there should be only line-to" cmd))
+      (destructuring-bind (x1 y1 x2 y2 x3 y3) args
+	(loop for i upto n collect
+	     (let* ((u (/ (* 1s0 i) n))
+		    (v (- 1s0 u))
+		    (uu (* u u))
+		    (vv (* v v))
+		    (x (+ (* vv v x0) (* 3 vv u x1) (* 3 uu v x2) (* uu u x3)))
+		    (y (+ (* vv v y0) (* 3 vv u y1) (* 3 uu v y2) (* uu u y3))))
+	       `(line-to ,x ,y))))))
 
   (defun expand-all-relative-bezier-into-lines (ls &key (n 10))
     (let ((res nil))
@@ -207,13 +205,10 @@
 		 (let ((lines (expand-relative-bezier rest :n n)))
 		   (dolist (f lines)
 		     (push f res))))
-		((eq cmd 'cubic-bezier)
-		 (let ((lines (expand-absolute-bezier rest :n n)))
-		   (dolist (f lines)
-		     (push f res))))
 		(t (push e res)))))
       (reverse res)))
 
+  
   (defun accumulate-relative-coordinates (ls)
     (let ((res nil)
 	  (x 0s0)
@@ -235,9 +230,15 @@
 		   (incf x xx)
 		   (incf y yy)
 		   (push `(translate ,x ,y) res)))
+		((eq cmd 'cubic-bezier)
+		 (dolist (e (expand-absolute-bezier (first res) rest))
+		   (push e res))
+		 (setf x (second (first res))
+		       y (third (first res))))
 		((eq cmd 'end-loop))
 		(t (break "unexpected command ~a" cmd)))))
       (reverse res)))
+
 
   (defun svg-to-immediate-opengl (ls)
     (let ((res))
@@ -250,16 +251,16 @@
 		 (push `(vertex ,x ,y) res)
 		 #+nil(push `(color 1 1 1) res))
 		(t (break "unexpected command ~a" cmd)))))
-      (reverse res)))
-  )
+      (reverse res))))
 
 (defmacro draw-one ()
   (let ((one "m 0.125,.875 c -1.187999,1.231999 -2.592001,1.3935 -4,1.4375 l 0,1.28125 c 0.637999,-0.022 1.684751,-0.06925 2.71875,-0.53125 l 0,11.3125 -2.59375,0 0,1.28125 6.875,0 0,-1.28125 -2.59375,0 0,-13.5 -0.40625,0 z")
-	(seven "m 0,0 0.40625,0 c 0.132,-0.4181 0.4605,-1.5508 0.8125,-1.9688 0.154,-0.176 1.78225,-0.1875 2.15625,-0.1875 l 4.84375,0 L 5.15625,1.5 c -2.023998,2.4419 -3.7035,5.7117 -4.1875,8.5937 -0.044,0.264 -0.166999,1.0311 0.625,1.0313 0.791999,0 0.92475,-0.7453 0.96875,-1.0313 L 2.75,9.0624 c 0.593999,-3.6077 1.599001,-5.9818 2.875,-7.5 l 3.78125,-4.5 0.09375,-0.4687 -5.1875,0 c -2.573997,0 -2.57175,-0.3008 -2.59375,-0.7188 l -0.375,0 z"))
+	(seven "m 0,0 0.40625,0 c 0.132,-0.4181 0.4605,-1.5508 0.8125,-1.9688 0.154,-0.176 1.78225,-0.1875 2.15625,-0.1875 l 4.84375,0 L 5.15625,1.5 c -2.023998,2.4419 -3.7035,5.7117 -4.1875,8.5937 -0.044,0.264 -0.166999,1.0311 0.625,1.0313 0.791999,0 0.92475,-0.7453 0.96875,-1.0313 L 2.75,9.0624 c 0.593999,-3.6077 1.599001,-5.9818 2.875,-7.5 l 3.78125,-4.5 0.09375,-0.4687 -5.1875,0 c -2.573997,0 -2.57175,-0.3008 -2.59375,-0.7188 l -0.375,0 z")
+	(zero "m 9.2620001,0.8382 c 0.3079997,-1.76 0.4839995,-3.52 -0.022,-5.148 -0.6599994,-2.112 -2.398001,-2.464 -3.322,-2.464 -1.3199987,0 -3.0140013,0.572 -4.268,2.618 C 0.70400102,-2.6378 0.30799976,-0.9218 7.0571899e-8,0.8382 -0.26399967,2.4882 -0.50599931,4.4682 0.11000007,6.1402 c 0.65999934,1.782 2.17800103,2.222 3.25600003,2.222 1.1879988,0 2.9480013,-0.462 4.268,-2.552 0.945999,-1.518 1.3420003,-3.234 1.628,-4.972 m -1.782,-0.264 c -0.2639998,1.65 -0.5060005,3.146 -0.99,4.554 -0.6819993,2.09 -2.046001,2.75 -3.036,2.75 -0.8579992,0 -2.0680001,-0.55 -2.112,-2.662 -0.022,-1.32 0.3300002,-3.344 0.528,-4.642 0.2419997,-1.408 0.4840003,-2.86 0.858,-4.048 0.8579991,-2.618 2.5300005,-2.816 3.08,-2.816 0.7259992,0 2.112,0.396 2.178,2.574 0.022,1.232 -0.2640003,2.904 -0.506,4.29"))
     `(defun draw-one-fun ()
        ,@(svg-to-immediate-opengl (accumulate-relative-coordinates 
 				   (expand-all-relative-bezier-into-lines 
-				    (svg-path-d-to-lisp (split-at-comma-space seven))
+				    (svg-path-d-to-lisp (split-at-comma-space zero))
 				    :n 4))))))
 
 (draw-one)
@@ -267,7 +268,7 @@
 
 (defmacro def-number-fun ()
   `(progn
-     ,@(loop for i from 1 below 10 collect
+     ,@(loop for i from 0 below 10 collect
 	    (let ((path-data (first (cdr (assoc i *numerals*)))))
 	      `(defun ,(intern (format nil "DRAW-~a" i)) ()
 		 ,@(svg-to-immediate-opengl
@@ -277,7 +278,7 @@
 		      :n 3))))))
      (defun draw-digit (c)
        (ecase c
-	 ,@(loop for i from 1 below 10 collect
+	 ,@(loop for i from 0 below 10 collect
 		`(,i (,(intern (format nil "DRAW-~a" i)))))))))
 
 (def-number-fun)
@@ -287,31 +288,34 @@
 #+nil
 (let ((phi 0s0))
  (defun draw ()
+   (line-width 1)
    (incf phi (/ (* 2 pi) 60))
    (with-primitive :lines
      (color 1 0 0) (vertex 0 0 0) (vertex 1 0 0)
      (color 0 1 0) (vertex 0 0 0) (vertex 0 1 0)
      (color 0 0 1) (vertex 0 0 0) (vertex 0 0 1))
    (color 1 1 1)
-   (with-pushed-matrix
-     (let ((s .1))
-      (scale s (- s) s))
+   #+nil (with-pushed-matrix
+     (let ((s .05))
+       (scale s (- s) s))
+     
      (with-primitives :line-loop
       (draw-one-fun)))
    (with-pushed-matrix
-     (let ((s 1.))
+     (let ((s .8))
       (scale s s s))
      (scale .02 -.02 .02)
      (translate -60 -1040 0)
-     (loop for i from 1 below 10 do
+     (loop for i from 0 below 10 do
 	  (with-primitive :line-loop
 	    (draw-digit i))))
    (translate (* .9 (cos phi)) 0 0)
    (color 1 1 1)
    (rect -.1 -1 .1 1)
-   (setf *get-sync*
+   (sleep (/ 68))
+ #+nil  (setf *get-sync*
     (glx-get-video-sync-sgi))
-   (unless (< *sync* 0)
+ #+nil  (unless (< *sync* 0)
      (let ((ret (glx-swap-interval-sgi *sync*)))
       (unless (= 0 ret)
 	(break "error setting swap interval ~a." ret)))
