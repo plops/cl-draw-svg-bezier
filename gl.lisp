@@ -10,6 +10,10 @@
 
 
 ;; use amdcccle for configuration of ATI graphics card
+;; http://www.stolk.org/debian/vblank-fglrx.html
+
+;; Option "Capabilities" "0x00000800"
+;; It turned out that bit 11 in this capabilities bitfield enables vblanking.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun build-var (classname var)
@@ -246,10 +250,8 @@
 	(destructuring-bind (cmd x y) e
 	  (cond ((eq cmd 'line-to)
 		 (push `(vertex ,x ,y) res))
-		((eq cmd 'translate)
-		 #+nil(push `(color 0 0 0) res)
-		 (push `(vertex ,x ,y) res)
-		 #+nil(push `(color 1 1 1) res))
+		((or (eq cmd 'translate))
+		 (push `(vertex ,x ,y) res))
 		(t (break "unexpected command ~a" cmd)))))
       (reverse res))))
 
@@ -285,9 +287,47 @@
 
 (defparameter *sync* 3)
 (defparameter *get-sync* 0)
-#+nil
-(let ((phi 0s0))
+
+(defun draw-centered-char (i)
+ (with-pushed-matrix 
+   (translate (* -11 i) 0 0)
+   (with-primitive :line-loop
+     (draw-digit i))))
+
+(defun draw-number (val)
+  (declare ((integer 0) val))
+  (let ((s (format nil "~a" val)))
+    (with-pushed-matrix
+      (dotimes (i (length s))
+	(translate 11 0 0)
+	(draw-centered-char (- (char-code (char s i))
+			       (char-code #\0)))))))
+
+
+(sb-alien:define-alien-routine ("glXGetCurrentDisplay" glx-get-current-display)
+    sb-alien:long)
+(sb-alien:define-alien-routine ("glXGetCurrentDrawable" glx-get-current-drawable)
+    sb-alien:int)
+(sb-alien:define-alien-routine ("glXSwapIntervalEXT" glx-swap-interval-ext)
+    sb-alien:int
+  (dpy sb-alien:long)
+  (drawable sb-alien:int)
+  (interval sb-alien:int))
+
+(glx-swap-interval-ext 0 0 0)
+
+(defparameter *blub* nil)
+(let ((phi 0s0)
+      (count 0))
  (defun draw ()
+   
+   (unless *blub*
+     (let ((dpy (glx-get-current-display))
+	   (win (glx-get-current-drawable)))
+      (setf *blub* (list
+		    dpy
+		    win
+		    (glx-swap-interval-ext dpy win 1)))))
    (line-width 1)
    (incf phi (/ (* 2 pi) 60))
    (with-primitive :lines
@@ -306,13 +346,11 @@
       (scale s s s))
      (scale .02 -.02 .02)
      (translate -60 -1040 0)
-     (loop for i from 0 below 10 do
-	  (with-primitive :line-loop
-	    (draw-digit i))))
+     (draw-number (incf count)))
    (translate (* .9 (cos phi)) 0 0)
    (color 1 1 1)
    (rect -.1 -1 .1 1)
-   (sleep (/ 68))
+  (sleep (/ 72))
  #+nil  (setf *get-sync*
     (glx-get-video-sync-sgi))
  #+nil  (unless (< *sync* 0)
