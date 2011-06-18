@@ -47,7 +47,7 @@
 
 (let* ((start 0)
        (end 0)
-       (count-max 30)
+       (count-max 12)
        (count count-max)
        (frame-rate 0))
   (defun measure-frame-rate ()
@@ -69,23 +69,12 @@
   
   (funcall (fenster-draw-func w))
     
-  (swap-buffers)
-;  (flush)
-  
-;  (finish)
  ; (sleep (/ 1 68))
   (measure-frame-rate)
   
   (post-redisplay))
 
 
-(sb-alien:define-alien-routine ("glXGetVideoSyncSGI" glx-get-video-sync-sgi)
-    sb-alien:int
-  (count sb-alien:int :out))
-
-(sb-alien:define-alien-routine ("glXSwapIntervalSGI" glx-swap-interval-sgi)
-    sb-alien:int
-  (count sb-alien:int))
 
 
 
@@ -308,26 +297,41 @@
     sb-alien:long)
 (sb-alien:define-alien-routine ("glXGetCurrentDrawable" glx-get-current-drawable)
     sb-alien:int)
-(sb-alien:define-alien-routine ("glXSwapIntervalEXT" glx-swap-interval-ext)
+#+nil(sb-alien:define-alien-routine ("glXSwapIntervalEXT" glx-swap-interval-ext)
     sb-alien:int
   (dpy sb-alien:long)
   (drawable sb-alien:int)
   (interval sb-alien:int))
 
-(glx-swap-interval-ext 0 0 0)
+(sb-alien:define-alien-routine ("glXWaitVideoSyncSGI" glx-wait-video-sync-sgi)
+    sb-alien:int
+  (divisor sb-alien:int)
+  (remainder sb-alien:int)
+  (count sb-alien:unsigned-int :out))
+
+(sb-alien:define-alien-routine ("glXGetVideoSyncSGI" glx-get-video-sync-sgi)
+    sb-alien:int
+  (count sb-alien:unsigned-int :out))
+
+(sb-alien:define-alien-routine ("glXSwapIntervalSGI" glx-swap-interval-sgi)
+    sb-alien:int
+  (count sb-alien:int))
+
+
 
 (defparameter *blub* nil)
 (let ((phi 0s0)
       (count 0))
  (defun draw ()
    
-   (unless *blub*
-     (let ((dpy (glx-get-current-display))
-	   (win (glx-get-current-drawable)))
-      (setf *blub* (list
-		    dpy
-		    win
-		    (glx-swap-interval-ext dpy win 1)))))
+   #+nil   (unless *blub*
+	     (let ((dpy (glx-get-current-display))
+		   (win (glx-get-current-drawable)))
+	       (setf *blub* (list
+			     dpy
+			     win
+			     (glx-swap-interval-ext dpy win 1)))))
+   
    (line-width 1)
    (incf phi (/ (* 2 pi) 60))
    (with-primitive :lines
@@ -346,11 +350,22 @@
       (scale s s s))
      (scale .02 -.02 .02)
      (translate -60 -1040 0)
-     (draw-number (incf count)))
+     (draw-number (incf count))
+     (translate 0 -24 0)
+     (draw-number (floor (* 100 (get-frame-rate)))))
    (translate (* .9 (cos phi)) 0 0)
    (color 1 1 1)
    (rect -.1 -1 .1 1)
-  (sleep (/ 72))
+   
+  (swap-buffers)
+;  (flush)
+  
+;  (finish)
+#+nil
+  (unless *blub*
+    (setf *blub* (multiple-value-list 
+		  #+nil (glx-get-video-sync-sgi)
+		  (glx-wait-video-sync-sgi 2 0))))
  #+nil  (setf *get-sync*
     (glx-get-video-sync-sgi))
  #+nil  (unless (< *sync* 0)
@@ -358,11 +373,11 @@
       (unless (= 0 ret)
 	(break "error setting swap interval ~a." ret)))
      (setf *sync* -1))))
-
+#+nil
 (get-frame-rate)
 
 #+nil
-(with-gui (600 630 600 30)
+(with-gui (600 630 600) 30
   (draw))
 
 
