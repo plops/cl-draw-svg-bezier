@@ -1,4 +1,4 @@
-(progn
+(eval-when (:compile-toplevel :load-toplevel :execute)
   (ql:quickload "cl-opengl")
   (ql:quickload "cl-glut")
   (ql:quickload "cxml"))
@@ -69,7 +69,6 @@
   
   (funcall (fenster-draw-func w))
     
- ; (sleep (/ 1 68))
   (measure-frame-rate)
   
   (post-redisplay))
@@ -266,12 +265,11 @@
 		    (accumulate-relative-coordinates 
 		     (expand-all-relative-bezier-into-lines 
 		      (svg-path-d-to-lisp (split-at-comma-space path-data))
-		      :n 3))))))
+		      :n 6))))))
      (defun draw-digit (c)
        (ecase c
 	 ,@(loop for i from 0 below 10 collect
 		`(,i (,(intern (format nil "DRAW-~a" i)))))))))
-
 (def-number-fun)
 
 (defparameter *sync* 3)
@@ -317,6 +315,9 @@
     sb-alien:int
   (count sb-alien:int))
 
+(sb-alien:load-shared-object "/usr/lib/xorg/modules/linux/libfglrxdrm.so")
+(sb-alien:define-alien-routine ("firegl_WaitVBlank" firegl-wait-vblank)
+    sb-alien:int)
 
 
 (defparameter *blub* nil)
@@ -333,8 +334,8 @@
 			     (glx-swap-interval-ext dpy win 1)))))
    
    (line-width 1)
-   (incf phi (/ (* 2 pi) 60))
-   (with-primitive :lines
+   (incf phi (/ (* 2 pi) 80))
+ #+nil  (with-primitive :lines
      (color 1 0 0) (vertex 0 0 0) (vertex 1 0 0)
      (color 0 1 0) (vertex 0 0 0) (vertex 0 1 0)
      (color 0 0 1) (vertex 0 0 0) (vertex 0 0 1))
@@ -346,19 +347,26 @@
      (with-primitives :line-loop
       (draw-one-fun)))
    (with-pushed-matrix
+     (translate (* .9 (cos phi)) 0 0)
+     (color 1 1 1)
+     (rect -.1 -1 .1 1))
+   
+   (with-pushed-matrix
      (let ((s .8))
-      (scale s s s))
+       (scale s s s))
      (scale .02 -.02 .02)
      (translate -60 -1040 0)
+     (enable :color-logic-op)
+     (logic-op :xor)
      (draw-number (incf count))
      (translate 0 -24 0)
-     (draw-number (floor (* 100 (get-frame-rate)))))
-   (translate (* .9 (cos phi)) 0 0)
-   (color 1 1 1)
-   (rect -.1 -1 .1 1)
-   
-  (swap-buffers)
-;  (flush)
+     (draw-number (floor (* 100 (get-frame-rate))))
+     (disable :color-logic-op))
+  (sleep (/ 69.12))
+  #+nil (flush)
+  #+nil (setf *blub* (firegl-wait-vblank))
+   (swap-buffers)
+  
   
 ;  (finish)
 #+nil
