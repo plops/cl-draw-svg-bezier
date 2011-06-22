@@ -84,7 +84,7 @@
 (defmacro with-gui ((w &optional (h w) (x 0) (y 0)) &body body)
   `(display-window 
     (make-instance 'bla::fenster
-                   :mode '(:double :rgb :depth)
+                   :mode '(:double :rgba :depth)
                    :width ,w :height ,h
                    :pos-x ,x :pos-y ,y 
                    :draw-func #'(lambda ()
@@ -265,7 +265,7 @@
 		    (accumulate-relative-coordinates 
 		     (expand-all-relative-bezier-into-lines 
 		      (svg-path-d-to-lisp (split-at-comma-space path-data))
-		      :n 6))))))
+		      :n 4))))))
      (defun draw-digit (c)
        (ecase c
 	 ,@(loop for i from 0 below 10 collect
@@ -322,7 +322,8 @@
 
 (defparameter *blub* nil)
 (let ((phi 0s0)
-      (count 0))
+      (count 0))s
+
  (defun draw ()
    
    #+nil   (unless *blub*
@@ -333,8 +334,8 @@
 			     win
 			     (glx-swap-interval-ext dpy win 1)))))
    
-   (line-width 1)
-   (incf phi (/ (* 2 pi) 80))
+   (line-width 2)
+   (incf phi (/ (* 2 pi) 70))
  #+nil  (with-primitive :lines
      (color 1 0 0) (vertex 0 0 0) (vertex 1 0 0)
      (color 0 1 0) (vertex 0 0 0) (vertex 0 1 0)
@@ -347,28 +348,34 @@
      (with-primitives :line-loop
       (draw-one-fun)))
    (with-pushed-matrix
-     (translate (* .9 (cos phi)) 0 0)
-     (color 1 1 1)
-     (rect -.1 -1 .1 1))
-   
+     (let ((x .1))
+      (translate (* (- 1s0 x) (cos phi)) 0 0)
+      (color 1 1 1)
+      (rect (- x) -1 x 1)))
+   (enable :line-smooth :blend)
+   (hint :line-smooth-hint :nicest)
+   (blend-func :src-alpha :one-minus-src-alpha )
    (with-pushed-matrix
      (let ((s .8))
        (scale s s s))
      (scale .02 -.02 .02)
      (translate -60 -1040 0)
-     (enable :color-logic-op)
-     (logic-op :xor)
+     ;(enable :color-logic-op)
+     ;(logic-op :xor)
      (draw-number (incf count))
      (translate 0 -24 0)
      (draw-number (floor (* 100 (get-frame-rate))))
-     (disable :color-logic-op))
-  (sleep (/ 69.12))
-  #+nil (flush)
+     ;(disable :color-logic-op)
+     )
+  (sleep .014s0)
+ #+nil (flush)
   #+nil (setf *blub* (firegl-wait-vblank))
+ #+nil (let ((sync (glx-get-video-sync-sgi)))
+    (glx-wait-video-sync-sgi 2 (mod (1+ sync) 2)))
    (swap-buffers)
   
   
-;  (finish)
+#+nil  (finish)
 #+nil
   (unless *blub*
     (setf *blub* (multiple-value-list 
@@ -385,7 +392,7 @@
 (get-frame-rate)
 
 #+nil
-(with-gui (600 630 600) 30
+(with-gui (700 700) 30
   (draw))
 
 
