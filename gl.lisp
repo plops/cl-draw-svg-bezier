@@ -8,13 +8,6 @@
   (:use :cl :gl :glut))
 (in-package :bla)
 
-
-;; use amdcccle for configuration of ATI graphics card
-;; http://www.stolk.org/debian/vblank-fglrx.html
-
-;; Option "Capabilities" "0x00000800"
-;; It turned out that bit 11 in this capabilities bitfield enables vblanking.
-
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun build-var (classname var)
     (list var 
@@ -242,7 +235,7 @@
 		 (push `(vertex ,x ,y) res))
 		(t (break "unexpected command ~a" cmd)))))
       (reverse res))))
-
+#+nil
 (defmacro draw-one ()
   (let ((one "m 0.125,.875 c -1.187999,1.231999 -2.592001,1.3935 -4,1.4375 l 0,1.28125 c 0.637999,-0.022 1.684751,-0.06925 2.71875,-0.53125 l 0,11.3125 -2.59375,0 0,1.28125 6.875,0 0,-1.28125 -2.59375,0 0,-13.5 -0.40625,0 z")
 	(seven "m 0,0 0.40625,0 c 0.132,-0.4181 0.4605,-1.5508 0.8125,-1.9688 0.154,-0.176 1.78225,-0.1875 2.15625,-0.1875 l 4.84375,0 L 5.15625,1.5 c -2.023998,2.4419 -3.7035,5.7117 -4.1875,8.5937 -0.044,0.264 -0.166999,1.0311 0.625,1.0313 0.791999,0 0.92475,-0.7453 0.96875,-1.0313 L 2.75,9.0624 c 0.593999,-3.6077 1.599001,-5.9818 2.875,-7.5 l 3.78125,-4.5 0.09375,-0.4687 -5.1875,0 c -2.573997,0 -2.57175,-0.3008 -2.59375,-0.7188 l -0.375,0 z")
@@ -253,6 +246,7 @@
 				    (svg-path-d-to-lisp (split-at-comma-space zero))
 				    :n 4))))))
 
+#+nil
 (draw-one)
 
 
@@ -290,104 +284,45 @@
 	(draw-centered-char (- (char-code (char s i))
 			       (char-code #\0)))))))
 
-
-(sb-alien:define-alien-routine ("glXGetCurrentDisplay" glx-get-current-display)
-    sb-alien:long)
-(sb-alien:define-alien-routine ("glXGetCurrentDrawable" glx-get-current-drawable)
-    sb-alien:int)
-#+nil(sb-alien:define-alien-routine ("glXSwapIntervalEXT" glx-swap-interval-ext)
-    sb-alien:int
-  (dpy sb-alien:long)
-  (drawable sb-alien:int)
-  (interval sb-alien:int))
-
-(sb-alien:define-alien-routine ("glXWaitVideoSyncSGI" glx-wait-video-sync-sgi)
-    sb-alien:int
-  (divisor sb-alien:int)
-  (remainder sb-alien:int)
-  (count sb-alien:unsigned-int :out))
-
-(sb-alien:define-alien-routine ("glXGetVideoSyncSGI" glx-get-video-sync-sgi)
-    sb-alien:int
-  (count sb-alien:unsigned-int :out))
-
-(sb-alien:define-alien-routine ("glXSwapIntervalSGI" glx-swap-interval-sgi)
-    sb-alien:int
-  (count sb-alien:int))
-
-(sb-alien:load-shared-object "/usr/lib/xorg/modules/linux/libfglrxdrm.so")
-(sb-alien:define-alien-routine ("firegl_WaitVBlank" firegl-wait-vblank)
-    sb-alien:int)
-
-
-(defparameter *blub* nil)
 (let ((phi 0s0)
-      (count 0))s
-
- (defun draw ()
-   
-   #+nil   (unless *blub*
-	     (let ((dpy (glx-get-current-display))
-		   (win (glx-get-current-drawable)))
-	       (setf *blub* (list
-			     dpy
-			     win
-			     (glx-swap-interval-ext dpy win 1)))))
-   
-   (line-width 2)
-   (incf phi (/ (* 2 pi) 70))
- #+nil  (with-primitive :lines
-     (color 1 0 0) (vertex 0 0 0) (vertex 1 0 0)
-     (color 0 1 0) (vertex 0 0 0) (vertex 0 1 0)
-     (color 0 0 1) (vertex 0 0 0) (vertex 0 0 1))
-   (color 1 1 1)
-   #+nil (with-pushed-matrix
-     (let ((s .05))
-       (scale s (- s) s))
+      (count 0))
+  
+  (defun draw ()
+    (line-width 2)
+    (incf phi (/ (* 2 pi) 70))
+    #+nil  (with-primitive :lines
+	     (color 1 0 0) (vertex 0 0 0) (vertex 1 0 0)
+	     (color 0 1 0) (vertex 0 0 0) (vertex 0 1 0)
+	     (color 0 0 1) (vertex 0 0 0) (vertex 0 0 1))
+    (color 1 1 1)
+    #+nil (with-pushed-matrix
+	      (let ((s .05))
+		(scale s (- s) s))
      
-     (with-primitives :line-loop
-      (draw-one-fun)))
-   (with-pushed-matrix
-     (let ((x .1))
-      (translate (* (- 1s0 x) (cos phi)) 0 0)
-      (color 1 1 1)
-      (rect (- x) -1 x 1)))
-   (enable :line-smooth :blend)
-   (hint :line-smooth-hint :nicest)
-   (blend-func :src-alpha :one-minus-src-alpha )
-   (with-pushed-matrix
-     (let ((s .8))
-       (scale s s s))
-     (scale .02 -.02 .02)
-     (translate -60 -1040 0)
-     ;(enable :color-logic-op)
-     ;(logic-op :xor)
-     (draw-number (incf count))
-     (translate 0 -24 0)
-     (draw-number (floor (* 100 (get-frame-rate))))
-     ;(disable :color-logic-op)
-     )
-  (sleep .014s0)
- #+nil (flush)
-  #+nil (setf *blub* (firegl-wait-vblank))
- #+nil (let ((sync (glx-get-video-sync-sgi)))
-    (glx-wait-video-sync-sgi 2 (mod (1+ sync) 2)))
-   (swap-buffers)
-  
-  
-#+nil  (finish)
-#+nil
-  (unless *blub*
-    (setf *blub* (multiple-value-list 
-		  #+nil (glx-get-video-sync-sgi)
-		  (glx-wait-video-sync-sgi 2 0))))
- #+nil  (setf *get-sync*
-    (glx-get-video-sync-sgi))
- #+nil  (unless (< *sync* 0)
-     (let ((ret (glx-swap-interval-sgi *sync*)))
-      (unless (= 0 ret)
-	(break "error setting swap interval ~a." ret)))
-     (setf *sync* -1))))
+	    (with-primitives :line-loop
+	      (draw-one-fun)))
+    (with-pushed-matrix
+	(let ((x .1))
+	  (translate (* (- 1s0 x) (cos phi)) 0 0)
+	  (color 1 1 1)
+	  (rect (- x) -1 x 1)))
+    (enable :line-smooth :blend)
+    (hint :line-smooth-hint :nicest)
+    (blend-func :src-alpha :one-minus-src-alpha )
+    (with-pushed-matrix
+	(let ((s .8))
+	  (scale s s s))
+      (scale .02 -.02 .02)
+      (translate -60 -1040 0)
+					;(enable :color-logic-op)
+					;(logic-op :xor)
+      (draw-number (incf count))
+      (translate 0 -24 0)
+      (draw-number (floor (* 100 (get-frame-rate))))
+					;(disable :color-logic-op)
+      )
+    (sleep .014s0)
+    (swap-buffers)))
 #+nil
 (get-frame-rate)
 
