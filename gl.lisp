@@ -263,14 +263,10 @@ but replaces START."
 	     (declare (ignore cmd))
 	     (list x y))))
    (let ((res)
-	 (start)
-	 (earliest-point) ;; for closing the loop
-	 )
+	 (start))
      (dolist (end ls)
        (let ((cmd (first end)))
 	(cond ((eq cmd 'line-to)
-	       (unless earliest-point
-		 (setf earliest-point start))
 	       (unless start
 		 (break "start should really be defined."))
 	       (unless (fequal (cdr start) (cdr end))
@@ -278,8 +274,6 @@ but replaces START."
 	      ((eq cmd 'translate))
 	      (t (break "unexpected command ~a" cmd))))
        (setf start end))
-     (push (list (coords start) (coords earliest-point))
-	   res)
      (reverse res))))
 
 
@@ -337,7 +331,7 @@ but replaces START."
       (count 0))
   
   (defun draw ()
-    (line-width 2)
+    (line-width 1.5)
     (incf phi (/ (* 2 pi) 70))
     #+nil  (with-primitive :lines
 	     (color 1 0 0) (vertex 0 0 0) (vertex 1 0 0)
@@ -377,7 +371,7 @@ but replaces START."
 (get-frame-rate)
 
 #+nil
-(with-gui (300 300) 30
+(with-gui (700 700) 30
   (draw))
 
 
